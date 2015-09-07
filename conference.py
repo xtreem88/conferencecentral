@@ -95,7 +95,7 @@ CONF_POST_REQUEST = endpoints.ResourceContainer(
 
 SESSION_GET_REQUEST = endpoints.ResourceContainer(
     message_types.VoidMessage,
-    websafeConferenceKey=messages.StringField(1, required=True),
+    websafeConferenceKey=messages.StringField(1),
     typeOfSession=messages.StringField(2)
 )
 
@@ -152,7 +152,7 @@ class ConferenceApi(remote.Service):
         user = endpoints.get_current_user()
         if not user:
             raise endpoints.UnauthorizedException('Authorization required')
-        user_id = _getUserId()
+        user_id = getUserId(user)
 
         if not request.name:
             raise endpoints.BadRequestException(
@@ -207,7 +207,7 @@ class ConferenceApi(remote.Service):
         user = endpoints.get_current_user()
         if not user:
             raise endpoints.UnauthorizedException('Authorization required')
-        user_id = _getUserId()
+        user_id = getUserId(user)
 
         # copy ConferenceForm/ProtoRPC Message into dict
         data = {field.name: getattr(request, field.name) for field in request.all_fields()}
@@ -281,8 +281,8 @@ class ConferenceApi(remote.Service):
             raise endpoints.UnauthorizedException('Authorization required')
 
         # create ancestor query for all key matches for this user
-        confs = Conference.query(ancestor=ndb.Key(Profile, _getUserId()))
-        prof = ndb.Key(Profile, _getUserId()).get()
+        confs = Conference.query(ancestor=ndb.Key(Profile, getUserId(user)))
+        prof = ndb.Key(Profile, getUserId(user)).get()
         # return set of ConferenceForm objects per Conference
         return ConferenceForms(
             items=[self._copyConferenceToForm(
@@ -327,9 +327,9 @@ class ConferenceApi(remote.Service):
             # Every operation except "=" is an inequality
             if filtr["operator"] != "=":
                 # check if inequality operation has been
-                #used in previous filters
+                # used in previous filters
                 # disallow the filter if inequality was
-                #performed on a different field before
+                # performed on a different field before
                 # track the field on which the inequality operation is
                 # performed
                 if inequality_field and inequality_field != filtr["field"]:
@@ -393,8 +393,7 @@ class ConferenceApi(remote.Service):
         )
 
     @endpoints.method(SESSION_GET_REQUEST, SessionForms,
-                      path='conference/{websafeConferenceKey}\
-                      /sessions/by_type/{typeOfSession}',
+                      path='conference/{websafeConferenceKey}/sessions/by_type/{typeOfSession}',
                       http_method='GET', name='getConferenceSessionsByType')
     def getConferenceSessionsByType(self, request):
         """Given a conference, return all sessions of a specified type"""
@@ -421,31 +420,6 @@ class ConferenceApi(remote.Service):
             items=[self._copySessionToForm(session) for session in sessions]
         )
 
-    @endpoints.method(CONF_GET_REQUEST, SessionForms,
-                      http_method='GET', name='getConferenceSessionFeed')
-    def getConferenceSessionFeed(self, request):
-        """Returns a conference's sorted feed of sessions occurring same day and later."""
-
-        # copy ConferenceForm/ProtoRPC Message into dict
-        data = {field.name: getattr(request, field.name) for field in request.all_fields()}
-
-        # fetch existing conference
-        conf = ndb.Key(urlsafe=request.websafeConferenceKey).get()
-
-        # check that conference exists
-        if not conf:
-            raise endpoints.NotFoundException(
-                'No conference found with\
-                 key: %s' % request.websafeConferenceKey)
-
-        sessions = Session.query(ancestor=ndb.Key(Conference, conf.key.id()))\
-                          .filter(Session.date >= datetime.now()-timedelta(1))\
-                          .order(Session.date, Session.startTime)
-
-        # return set of SessionForm objects per Session
-        return SessionForms(
-            items=[self._copySessionToForm(session) for session in sessions]
-        )
 
 # - - - Session objects - - - - - - - - - - - - - - - - - - -
 
@@ -456,7 +430,7 @@ class ConferenceApi(remote.Service):
         user = endpoints.get_current_user()
         if not user:
             raise endpoints.UnauthorizedException('Authorization required')
-        user_id = _getUserId()
+        user_id = getUserId(user)
 
         if not request.name:
             raise endpoints.BadRequestException(
@@ -551,8 +525,8 @@ class ConferenceApi(remote.Service):
         )
 
     @endpoints.method(message_types.VoidMessage, SessionForms,
-                      http_method='GET', name='getTBDSessions')
-    def getTBDSessions(self, request):
+                      http_method='GET', name='getIncompleteSessions')
+    def getIncompleteSessions(self, request):
         """Returns sessions missing time/date information"""
 
         sessions = Session.query(ndb.OR(
@@ -560,6 +534,31 @@ class ConferenceApi(remote.Service):
             Session.startTime == None,
             Session.date == None
         ))
+        return SessionForms(
+            items=[self._copySessionToForm(session) for session in sessions]
+        )
+
+    @endpoints.method(CONF_GET_REQUEST, SessionForms,
+            http_method='GET', name='getAvailableSessions')
+    def getAvailableSessions(self, request):
+        """Returns a conference's sorted list of sessions yet to occur."""
+
+        # copy ConferenceForm/ProtoRPC Message into dict
+        data = {field.name: getattr(request, field.name) for field in request.all_fields()}
+
+        # fetch existing conference
+        conf = ndb.Key(urlsafe=request.websafeConferenceKey).get()
+
+        # check that conference exists
+        if not conf:
+            raise endpoints.NotFoundException(
+                'No conference found with key: %s' % request.websafeConferenceKey)
+
+        sessions = Session.query(ancestor=ndb.Key(Conference, conf.key.id()))\
+                          .filter(Session.date >= datetime.now()-timedelta(1))\
+                          .order(Session.date, Session.startTime)
+
+        # return set of SessionForm objects per Session
         return SessionForms(
             items=[self._copySessionToForm(session) for session in sessions]
         )
@@ -646,7 +645,7 @@ class ConferenceApi(remote.Service):
             raise endpoints.UnauthorizedException('Authorization required')
 
         # get Profile from datastore
-        user_id = _getUserId()
+        user_id = getUserId(user)
         p_key = ndb.Key(Profile, user_id)
         profile = p_key.get()
         # create new Profile if not there
@@ -702,7 +701,7 @@ class ConferenceApi(remote.Service):
         user = endpoints.get_current_user()
         if not user:
             raise endpoints.UnauthorizedException('Authorization required')
-        # user_id = _getUserId()
+        # user_id = getUserId(user)
 
         # fetch and check session
         session = ndb.Key(urlsafe=request.websafeSessionKey).get()
@@ -716,12 +715,12 @@ class ConferenceApi(remote.Service):
         prof = self._getProfileFromUser()
 
         # check if session already added to wishlist
-        if session.key in prof.sessionsToAttend:
+        if request.websafeSessionKey in prof.conferenceKeysToAttend:
             raise endpoints.BadRequestException(
                 'Session already saved to wishlist: %s' % request.websafeSessionKey)
 
         # append to user profile's wishlist
-        prof.sessionsToAttend.append(session.key)
+        prof.conferenceKeysToAttend.append(request.websafeSessionKey)
         prof.put()
 
         return self._copySessionToForm(session)
@@ -729,20 +728,19 @@ class ConferenceApi(remote.Service):
     @endpoints.method(message_types.VoidMessage, SessionForms,
                       http_method='POST', name='getSessionsInWishlist')
     def getSessionsInWishlist(self, request):
-        """Returns a user's wishlist of sessions"""
-        # preload necessary data items
-        user = endpoints.get_current_user()
-        if not user:
-            raise endpoints.UnauthorizedException('Authorization required')
-
-        # fetch profile and wishlist
-        prof = self._getProfileFromUser()
-        session_keys = prof.sessionsToAttend
-        sessions = [session_key.get() for session_key in session_keys]
-
-        # return set
+        """Query for all the sessions in a conference that the user is
+        interested in."""
+        prof = self._getProfileFromUser()  # get user Profile
+        session_keys = [
+            ndb.Key(urlsafe=sess)
+            for sess in prof.conferenceKeysToAttend
+        ]
+        sessions = ndb.get_multi(session_keys)
         return SessionForms(
-            items=[self._copySessionToForm(session) for session in sessions]
+            items=[
+                self._copySessionToForm(session)
+                for session in sessions
+            ]
         )
 
 
