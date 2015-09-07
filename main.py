@@ -10,7 +10,7 @@ created by wesc on 2014 may 24
 
 """
 
-__author__ = 'wesc+api@google.com (Wesley Chun)'
+__author__ = 'xtreem88@gmail.com (Segun)'
 
 import webapp2
 from google.appengine.api import app_identity

@@ -82,10 +82,10 @@ I modified the `createSession` endpoint to cross-check if the speaker appeared i
 
 ### Setup Instructions
 
--Requirements
- [Google App Engine SDK for Python](https://cloud.google.com/appengine/downloads)
- Python 2.7
+Requirements
+-[Google App Engine SDK for Python](https://cloud.google.com/appengine/downloads)
+-Python 2.7
 
-Run using Google App Engine SDK for Python
+--Run using Google App Engine SDK for Python
 
 
