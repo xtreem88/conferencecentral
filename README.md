@@ -48,6 +48,10 @@ class SessionForm(messages.Message):
     startTime = messages.IntegerField(7)
     websafeKey = messages.StringField(8)
 
+class Speaker(ndb.Model):
+    name = ndb.StringProperty(required=True)
+    details = ndb.StringProperty()
+
 ```
 
 

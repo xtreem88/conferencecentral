@@ -57,6 +57,7 @@ from utils import getUserId
 EMAIL_SCOPE = endpoints.EMAIL_SCOPE
 API_EXPLORER_CLIENT_ID = endpoints.API_EXPLORER_CLIENT_ID
 MEMCACHE_ANNOUNCEMENTS_KEY = "RECENT_ANNOUNCEMENTS"
+MEMCACHE_FEATURED_SPEAKER_KEY = "FEATURED_SPEAKER"
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -81,6 +82,13 @@ FIELDS = {
     'TOPIC': 'topics',
     'MONTH': 'month',
     'MAX_ATTENDEES': 'maxAttendees',
+}
+
+SESSION_FIELDS = {
+    'SPEAKER': 'speaker',
+    'TYPE': 'typeOfSession',
+    'START_TIME': 'startTime',
+    'MAX_ATTENDEES': 'maxAttendees'
 }
 
 CONF_GET_REQUEST = endpoints.ResourceContainer(
@@ -423,6 +431,28 @@ class ConferenceApi(remote.Service):
 
 # - - - Session objects - - - - - - - - - - - - - - - - - - -
 
+    @staticmethod
+    def _checkFeaturedSpeaker(speaker):
+        """Create speaker announcement if there is more than one
+        session featuring this speaker."""
+        sessions = Session.query(
+            Session.speaker == speaker).fetch(projection=[Session.name])
+
+        logging.error("!"*100)
+        logging.error(len(sessions))
+        if speaker is not None and len(sessions) > 0:
+            featured = '%s %s %s %s' % (
+                'Featured speaker:',
+                speaker,
+                'is speaking at the following sessions:',
+                ', '.join(session.name for session in sessions)
+            )
+            memcache.set(MEMCACHE_FEATURED_SPEAKER_KEY, featured)
+        else:
+            featured = ""
+            memcache.delete(MEMCACHE_FEATURED_SPEAKER_KEY)
+        return featured
+
     def _createSessionObject(self, request):
         """Create or update Conference object,\
          returning ConferenceForm/request."""
@@ -473,15 +503,15 @@ class ConferenceApi(remote.Service):
         Session(**data).put()
 
         # check if speaker exists in other sections; if so, add to memcache
-        sessions = Session.query(Session.speaker == data['speaker'],
-                                 ancestor=p_key)
-        if len(list(sessions)) > 1:
+        sessions = Session.query(Session.speaker == data['speaker'], ancestor=conf_key).count()
+        if sessions > 1:
             cache_data = {}
             cache_data['speaker'] = data['speaker']
             # cache_data['sessions'] = sessions # TODO: get pickler to load
             # full properties...
             cache_data['sessionNames'] = [session.name for session in sessions]
-            if not memcache.set('featured_speaker', cache_data):
+            taskqueue.add(params={'speaker': data['speaker']}, url='/tasks/set_featured_speaker')
+            if not memcache.set(MEMCACHE_FEATURED_SPEAKER_KEY, cache_data):
                 logging.error('Memcache set failed.')
 
         return request
@@ -590,7 +620,7 @@ class ConferenceApi(remote.Service):
     def getFeaturedSpeaker(self, request):
         """Returns the sessions of the featured speaker"""
         # attempt to get data from memcache
-        data = memcache.get('featured_speaker')
+        data = memcache.get(MEMCACHE_FEATURED_SPEAKER_KEY)
         from pprint import pprint
         pprint(data)
         sessions = []
@@ -785,6 +815,46 @@ class ConferenceApi(remote.Service):
     def putAnnouncement(self, request):
         """Put Announcement into memcache"""
         return StringMessage(data=self._cacheAnnouncement())
+        
+    @staticmethod
+    def _cacheSpeakerAnnouncement():
+        """Create speaker announcement if there is more than one
+        session featuring this speaker."""
+        sessions = Session.query(
+            Session.speaker == speaker).fetch(projection=[Session.name])
+
+        logging.error("!"*100)
+        logging.error(len(sessions))
+        if speaker is not None and len(sessions) > 0:
+            featured = '%s %s %s %s' % (
+                'Featured speaker:',
+                speaker,
+                'is speaking at the following sessions:',
+                ', '.join(session.name for session in sessions)
+            )
+            memcache.set(MEMCACHE_FEATURED_SPEAKER_KEY, featured)
+        else:
+            featured = ""
+            memcache.delete(MEMCACHE_FEATURED_SPEAKER_KEY)
+        return featured
+
+    @endpoints.method(message_types.VoidMessage, StringMessage,
+            path='conference/speaker/announcement/get',
+            http_method='GET', name='getSpeakerAnnouncement')
+    def getSpeakerAnnouncement(self, request):
+        """Return Speaker Announcement from memcache."""
+        return StringMessage(data=memcache.get(MEMCACHE_FEATURED_SPEAKER_KEY) or "")
+    @endpoints.method(message_types.VoidMessage, message_types.VoidMessage,
+        path='TestPushTask',
+        http_method='GET', name='TestPushTask')
+    def putSpeakerAnnouncement(self, request):
+        """Push Task to get Featured Speaker"""
+        taskqueue.add(
+            queue_name='default',
+            params={},
+            url='/speaker/featured'
+        )
+        return message_types.VoidMessage()
 
 
 # - - - Registration - - - - - - - - - - - - - - - - - - - -

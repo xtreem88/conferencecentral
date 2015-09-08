@@ -23,6 +23,10 @@ class SetAnnouncementHandler(webapp2.RequestHandler):
         ConferenceApi._cacheAnnouncement()
         self.response.set_status(204)
 
+class GetFeaturedSpeakerHandler(webapp2.RequestHandler):
+    def get(self):
+        """Get featured speaker request"""
+        ConferenceApi._cacheSpeakerAnnouncement()
 
 class SendConfirmationEmailHandler(webapp2.RequestHandler):
     def post(self):
@@ -41,4 +45,5 @@ class SendConfirmationEmailHandler(webapp2.RequestHandler):
 app = webapp2.WSGIApplication([
     ('/crons/set_announcement', SetAnnouncementHandler),
     ('/tasks/send_confirmation_email', SendConfirmationEmailHandler),
+     ('/speaker/featured', GetFeaturedSpeakerHandler),
 ], debug=True)
