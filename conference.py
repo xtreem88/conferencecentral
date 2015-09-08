@@ -539,7 +539,7 @@ class ConferenceApi(remote.Service):
         return self._createSessionObject(request)
 
     @endpoints.method(SPEAKER_GET_REQUEST, SessionForms,
-                      path='sessions/{speaker}',
+                      path='sessions/speakers/{speaker}',
                       http_method='GET', name='getSessionsBySpeaker')
     def getSessionsBySpeaker(self, request):
         """Given a speaker, return all sessions given by him/her across all conferences"""
