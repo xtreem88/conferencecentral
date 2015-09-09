@@ -24,9 +24,9 @@ class SetAnnouncementHandler(webapp2.RequestHandler):
         self.response.set_status(204)
 
 class GetFeaturedSpeakerHandler(webapp2.RequestHandler):
-    def get(self):
+    def post(self):
         """Get featured speaker request"""
-        ConferenceApi._cacheSpeakerAnnouncement()
+        ConferenceApi._cacheSpeakerAnnouncement(self.request.get('speaker'))
 
 class SendConfirmationEmailHandler(webapp2.RequestHandler):
     def post(self):

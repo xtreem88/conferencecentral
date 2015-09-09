@@ -52,18 +52,23 @@ class Speaker(ndb.Model):
     name = ndb.StringProperty(required=True)
     details = ndb.StringProperty()
 
+class Wishlist(ndb.Model):
+    user = ndb.StringProperty(required=True)
+    websafeSessionKey = ndb.StringProperty()
+
 ```
 
 
 In order to represent the one `conference` to many `sessions` relationship, I used the ancestor relationship.  This allows for strong consistent querying, as sessions can be queried by their conference ancestor.
 
-Since there is only one speaker for a session, i added it as a Property of the Session Kind
+I used the has_a relationship for the Speaker and the Session models because i the speakers should be changeable at any point
 
 Session types (e.g. talk, lecture) were implemented more in a "tag" representation, with sessions able to receive multiple different types.
 
+
 #### Task 2: Add Sessions to User Wishlist
 
-I modified the `Profile` model to accommodate a 'wishlist' stored as a repeated key property field, named `conferenceKeysToAttend`. 
+`Wishlist` uses both types of relationships, ancestor for the user and has_a for the session key
 I added two endpoint methods to the API:
 
 - `addSessionToWishlist`: given a session websafe key, saves a session to a user's wishlist.

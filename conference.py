@@ -48,6 +48,8 @@ from models import ConferenceQueryForms
 from models import TeeShirtSize
 from models import Wishlist
 from models import WishlistForm
+from models import Speaker
+
 
 from settings import WEB_CLIENT_ID
 from settings import ANDROID_CLIENT_ID
@@ -505,6 +507,9 @@ class ConferenceApi(remote.Service):
             data['startTime'] = datetime.strptime(
                 data['startTime'][:5], "%H:%M").time()
 
+        #create speaker
+        speaker = self._createSpeakerObject(data['speaker'])
+
         # generate key based off of parent-child relationship
         p_key = ndb.Key(Conference, conf.key.id())
         s_id = Session.allocate_ids(size=1, parent=p_key)[0]
@@ -517,17 +522,44 @@ class ConferenceApi(remote.Service):
         Session(**data).put()
 
         # check if speaker exists in other sections; if so, add to memcache
-        sessions = Session.query(Session.speaker == data['speaker'], ancestor=s_key).count()
+        sessions = Session.query(Session.speaker == data['speaker'], ancestor=p_key).count()
         if sessions > 1:
-            cache_data = {}
-            cache_data['speaker'] = data['speaker']
-            # cache_data['sessions'] = sessions # TODO: get pickler to load
-            # full properties...
-            cache_data['sessionNames'] = [session.name for session in sessions]
-            taskqueue.add(url='/tasks/set_featured_speaker')
+            
+            taskqueue.add(params={'speaker': data['speaker']}, url='/tasks/set_featured_speaker')
             
 
         return request
+
+    def _createSpeakerObject(self, name):
+        """Create or update Speaker object,\
+         returning SpeakerForm/request."""
+
+        sp_key = ndb.Key(Speaker, name)
+        speaker = sp_key.get()
+        
+        if not speaker:
+            speaker = Speaker(
+                    key = sp_key,
+                    name = name,
+                    details = '',
+                   
+                )
+            speaker.put()
+
+        return speaker
+
+    def _updateSpeakerObject(self, details):
+        
+
+        sp_key = ndb.Key(Speaker, name)
+        speaker = sp_key.get()
+        speaker.details = details
+
+        speaker.put()
+
+        return speaker
+        
+
 
     def _copySessionToForm(self, session):
         """Copy relevant fields from Session to SessionForm."""
@@ -545,7 +577,7 @@ class ConferenceApi(remote.Service):
         return sf
 
     @endpoints.method(SessionForm, SessionForm,
-                      path='sessions',
+                      path='sessions/{websafeConferenceKey}',
                       http_method='POST', name='createSession')
     def createSession(self, request):
         """Open to the organizer of the conference"""
@@ -726,14 +758,12 @@ class ConferenceApi(remote.Service):
         
         data['user'] = user_id
 
-        
-
        
         p_key = ndb.Key(Profile, user_id)
         w_id = Wishlist.allocate_ids(size=1, parent=p_key)[0]
         w_key = ndb.Key(Wishlist, w_id, parent=p_key)
         data['key'] = w_key
-
+        Wishlist(**data).put()
         
         return request
 
@@ -812,26 +842,13 @@ class ConferenceApi(remote.Service):
         return StringMessage(data=self._cacheAnnouncement())
         
     @staticmethod
-    def _cacheSpeakerAnnouncement():
+    def _cacheSpeakerAnnouncement(speaker):
         """Create speaker announcement if there is more than one
         session featuring this speaker."""
-        sessions = Session.query(
-            Session.speaker == speaker).fetch(projection=[Session.name])
-
-        logging.error("!"*100)
-        logging.error(len(sessions))
-        if speaker is not None and len(sessions) > 0:
-
-            featured = '%s %s %s %s' % (
-                'Featured speaker:',
-                speaker,
-                'is speaking at the following sessions:',
-                ', '.join(session.name for session in sessions)
-            )
-            memcache.set(MEMCACHE_FEATURED_SPEAKER_KEY, featured)
-        else:
-            featured = ""
-            memcache.delete(MEMCACHE_FEATURED_SPEAKER_KEY)
+        sessions = Session.query().filter(Session.speaker == speaker)
+        featured = '%s %s %s %s' % ('Featured speaker:', speaker, 'is speaking at the following sessions:', ', '
+                                    .join(session.name for session in sessions))
+        memcache.set(MEMCACHE_FEATURED_SPEAKER_KEY, featured)
         return featured
 
     @endpoints.method(message_types.VoidMessage, StringMessage,
