@@ -177,4 +177,13 @@ class SpeakerForm(messages.Message):
     speaker = messages.StringField(1)
     sessionNames = messages.StringField(2, repeated=True)
 
+class Wishlist(ndb.Model):
+    user = ndb.StringProperty(required=True)
+    websafeSessionKey = ndb.StringProperty()
+
+class WishlistForm(messages.Message):
+
+    """WishlistForm -- Wishlist outbound form message"""
+    user = messages.StringField(1)
+    websafeSessionKey = messages.StringField(2)
 
